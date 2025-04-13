@@ -19,6 +19,7 @@
 #include "mlir/Debug/Observers/ActionLogging.h"
 #include "mlir/Dialect/IRDL/IR/IRDL.h"
 #include "mlir/Dialect/IRDL/IRDLLoading.h"
+#include "mlir/Dialect/Linalg/TransformOps/DialectExtension.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -46,9 +47,53 @@ using namespace llvm;
 const char *toolName = "Tensor Tiling Tutorial Compiler";
 
 void createPassPipeline(PassManager &pm) {
-  pm.addPass(createCanonicalizerPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(tutorial::createTutorialTileAndFuse());
+  // Apply required transform spec.
+  { pm.addPass(tutorial::createTutorialApplyTilingSpec()); }
+
+  // Parallel tiling using scf.forall
+  {
+    tutorial::TutorialTileAndFuseOptions options;
+    options.tilingLevel = tutorial::TilingLevel::Parallel;
+    pm.addPass(tutorial::createTutorialTileAndFuse(options));
+  }
+
+  // Serial tiling using scf.for
+  {
+    tutorial::TutorialTileAndFuseOptions options;
+    options.tilingLevel = tutorial::TilingLevel::Serial;
+    pm.addPass(tutorial::createTutorialTileAndFuse(options));
+  }
+
+  // Generalization and cleanups.
+  {
+    pm.addPass(createLinalgGeneralizeNamedOpsPass());
+    pm.addPass(createCanonicalizerPass());
+    pm.addPass(createCSEPass());
+    pm.addPass(createLoopInvariantCodeMotionPass());
+    LinalgFoldUnitExtentDimsPassOptions options;
+    options.useRankReducingSlices = true;
+    pm.addPass(createLinalgFoldUnitExtentDimsPass(options));
+  }
+
+  // Vectorization
+  {
+    pm.addPass(tutorial::createTutorialVectorization());
+    pm.addPass(createCanonicalizerPass());
+    pm.addPass(tensor::createFoldTensorSubsetOpsPass());
+    pm.addPass(createCSEPass());
+  }
+
+  // Bufferization
+  {
+    bufferization::OneShotBufferizePassOptions options;
+    options.bufferizeFunctionBoundaries = true;
+    options.functionBoundaryTypeConversion =
+        bufferization::LayoutMapOption::IdentityLayoutMap;
+    pm.addPass(bufferization::createOneShotBufferizePass(options));
+    pm.addPass(createCanonicalizerPass());
+    pm.addPass(createCSEPass());
+    pm.addPass(memref::createFoldMemRefAliasOpsPass());
+  }
 }
 
 LogicalResult tutorialOpt(int argc, char **argv) {
@@ -104,6 +149,22 @@ LogicalResult tutorialOpt(int argc, char **argv) {
   registry.insert<LLVM::LLVMDialect>();
   registry.insert<index::IndexDialect>();
   registry.insert<affine::AffineDialect>();
+  registry.insert<transform::TransformDialect>();
+
+  linalg::registerAllDialectInterfaceImplementations(registry);
+  tensor::registerInferTypeOpInterfaceExternalModels(registry);
+  vector::registerBufferizableOpInterfaceExternalModels(registry);
+  arith::registerBufferizableOpInterfaceExternalModels(registry);
+  tensor::registerBufferizableOpInterfaceExternalModels(registry);
+  scf::registerBufferizableOpInterfaceExternalModels(registry);
+  bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
+      registry);
+  vector::registerSubsetOpInterfaceExternalModels(registry);
+  scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
+
+  tensor::registerTransformDialectExtension(registry);
+  scf::registerTransformDialectExtension(registry);
+  linalg::registerTransformDialectExtension(registry);
 
   // Create a context just for the current buffer. Disable threading on creation
   // since we'll inject the thread-pool separately.
@@ -120,6 +181,7 @@ LogicalResult tutorialOpt(int argc, char **argv) {
 
   PassManager pm(op.get()->getName(), PassManager::Nesting::Implicit);
   pm.enableVerifier();
+  pm.enableIRPrinting();
 
   createPassPipeline(pm);
 

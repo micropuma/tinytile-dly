@@ -49,7 +49,9 @@ set(LIBS
 
 add_llvm_executable(tutorial-compiler 
     main.cpp
-    TileAndFuse.cpp)
+    TileAndFuse.cpp
+    Vectorization.cpp
+    ApplyTilingSpec.cpp)
 
 llvm_update_compile_flags(tutorial-compiler)
 target_link_libraries(tutorial-compiler PRIVATE ${LIBS})
