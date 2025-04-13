@@ -1,0 +1,141 @@
+#include "Passes.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/LogicalResult.h"
+#include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/Process.h"
+#include "llvm/Support/Regex.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/StringSaver.h"
+#include "llvm/Support/ThreadPool.h"
+#include "llvm/Support/ToolOutputFile.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Debug/CLOptionsSetup.h"
+#include "mlir/Debug/Counter.h"
+#include "mlir/Debug/DebuggerExecutionContextHook.h"
+#include "mlir/Debug/ExecutionContext.h"
+#include "mlir/Debug/Observers/ActionLogging.h"
+#include "mlir/Dialect/IRDL/IR/IRDL.h"
+#include "mlir/Dialect/IRDL/IRDLLoading.h"
+#include "mlir/IR/AsmState.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/Location.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/InitAllDialects.h"
+#include "mlir/InitAllPasses.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
+#include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/Timing.h"
+#include "mlir/Support/ToolUtilities.h"
+#include "mlir/Tools/ParseUtilities.h"
+#include "mlir/Tools/Plugins/DialectPlugin.h"
+#include "mlir/Tools/Plugins/PassPlugin.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
+
+using namespace mlir;
+using namespace llvm;
+
+const char *toolName = "Tensor Tiling Tutorial Compiler";
+
+void createPassPipeline(PassManager &pm) {
+  pm.addPass(createCanonicalizerPass());
+  pm.addPass(createCSEPass());
+  pm.addPass(tutorial::createTutorialTileAndFuse());
+}
+
+LogicalResult tutorialOpt(int argc, char **argv) {
+  static llvm::cl::OptionCategory mainOptions("Tutorial Options");
+
+  // General command line flags.
+  static cl::opt<std::string> inputFilename(
+      cl::Positional, cl::desc("<input file>"), cl::init("-"));
+
+  static cl::opt<std::string> outputFilename(
+      "o", cl::desc("Output filename"), cl::value_desc("filename"),
+      cl::init("-"), llvm::cl::cat(mainOptions));
+
+  cl::ParseCommandLineOptions(argc, argv);
+
+  InitLLVM y(argc, argv);
+
+  // When reading from stdin and the input is a tty, it is often a user mistake
+  // and the process "appears to be stuck". Print a message to let the user know
+  // about it!
+  if (inputFilename == "-" &&
+      sys::Process::FileDescriptorIsDisplayed(fileno(stdin)))
+    llvm::errs() << "(processing input from stdin now, hit ctrl-c/ctrl-d to "
+                    "interrupt)\n";
+
+  // Set up the input file.
+  std::string errorMessage;
+  auto file = openInputFile(inputFilename, &errorMessage);
+  if (!file) {
+    llvm::errs() << errorMessage << "\n";
+    return failure();
+  }
+
+  auto output = openOutputFile(outputFilename, &errorMessage);
+  if (!output) {
+    llvm::errs() << errorMessage << "\n";
+    return failure();
+  }
+
+  // Tell sourceMgr about this buffer, which is what the parser will pick up.
+  auto sourceMgr = std::make_shared<SourceMgr>();
+  sourceMgr->AddNewSourceBuffer(std::move(file), SMLoc());
+
+  DialectRegistry registry;
+
+  registry.insert<func::FuncDialect>();
+  registry.insert<arith::ArithDialect>();
+  registry.insert<linalg::LinalgDialect>();
+  registry.insert<tensor::TensorDialect>();
+  registry.insert<scf::SCFDialect>();
+  registry.insert<vector::VectorDialect>();
+  registry.insert<memref::MemRefDialect>();
+  registry.insert<LLVM::LLVMDialect>();
+  registry.insert<index::IndexDialect>();
+  registry.insert<affine::AffineDialect>();
+
+  // Create a context just for the current buffer. Disable threading on creation
+  // since we'll inject the thread-pool separately.
+  MLIRContext context(registry, MLIRContext::Threading::DISABLED);
+
+  SourceMgrDiagnosticHandler sourceMgrHandler(*sourceMgr, &context);
+
+  ParserConfig parseConfig(&context);
+  OwningOpRef<Operation *> op =
+      parseSourceFileForTool(sourceMgr, parseConfig, true);
+  if (!op) {
+    return failure();
+  }
+
+  PassManager pm(op.get()->getName(), PassManager::Nesting::Implicit);
+  pm.enableVerifier();
+
+  createPassPipeline(pm);
+
+  // Run the pipeline.
+  if (failed(pm.run(*op))) {
+    return failure();
+  }
+
+  AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr);
+  op.get()->print(output->os(), asmState);
+  output->os() << '\n';
+
+  output->keep();
+  return success();
+}
+
+int main(int argc, char **argv) {
+  return mlir::asMainReturnCode(tutorialOpt(argc, argv));
+}
