@@ -1,8 +1,8 @@
 // Remove the "transform_tiling_spec" attribute and uncomment the lowering
 // config to try out the pass pipeline tiling
 #config = {
-  // parallel = [1, 1, 5, 64],
-  // serial = [0, 0, 0, 0, 1, 1, 1]
+  parallel = [1, 1, 5, 64],
+  reduction = [0, 0, 0, 0, 1, 1, 1]
 }
 
 !tinput = tensor<5x82x102x128xf32>
@@ -12,22 +12,11 @@
 
 module attributes { transform.with_named_sequence } {
   func.func @conv(
-      %input: !tinput {bufferization.writable = false,
-                       bufferization.access = "read",
-                       bufferization.buffer_layout =
-                           affine_map<(d0,d1,d2,d3)->(d0,d1,d2,d3)>},
-      %filter: !tfilter {bufferization.writable = false,
-                        bufferization.access = "read",
-                        bufferization.buffer_layout =
-                            affine_map<(d0,d1,d2,d3)->(d0,d1,d2,d3)>},
-      %bias: !tbias {bufferization.writable = false,
-                     bufferization.access = "read",
-                     bufferization.buffer_layout = affine_map<(d0)->(d0)>},
-      %output: !toutput {bufferization.writable = true,
-                         bufferization.buffer_layout =
-                             affine_map<(d0,d1,d2,d3)->(d0,d1,d2,d3)>,
-                         bufferization.access = "write"})  -> !toutput
-    attributes { transform_tiling_spec = "__halide" }
+      %input: !tinput,
+      %filter: !tfilter,
+      %bias: !tbias,
+      %output: !toutput)  -> !toutput
+    attributes { }
   {
     %bias_init = tensor.empty() : !toutput
     %biased = linalg.broadcast ins(%bias : !tbias)

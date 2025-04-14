@@ -12,7 +12,7 @@ def TutorialTileAndFuse : Pass<"tutorial-tile-and-fuse", "func::FuncOp"> {
     "",
     [{llvm::cl::values(
       clEnumValN(tutorial::TilingLevel::Parallel, "parallel", "scf.forall"),
-      clEnumValN(tutorial::TilingLevel::Serial, "serial", "scf.for")
+      clEnumValN(tutorial::TilingLevel::Reduction, "Reduction", "scf.for")
     )}]>
   ];
 }

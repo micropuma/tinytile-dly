@@ -56,10 +56,10 @@ static SmallVector<OpFoldResult> getTilingSizes(DictionaryAttr loweringConfig,
       }
       break;
     }
-    case tutorial::TilingLevel::Serial: {
-      if (auto serial = loweringConfig.getAs<ArrayAttr>("serial")) {
+    case tutorial::TilingLevel::Reduction: {
+      if (auto reduction = loweringConfig.getAs<ArrayAttr>("reduction")) {
         return llvm::map_to_vector(
-            serial.getAsRange<IntegerAttr>(),
+            reduction.getAsRange<IntegerAttr>(),
             [](IntegerAttr x) { return OpFoldResult(x); });
       }
       break;
@@ -96,51 +96,68 @@ void TutorialTileAndFuse::runOnOperation() {
     tilingOptions.setLoopType(scf::SCFTilingOptions::LoopType::ForOp);
   }
 
-  scf::SCFTileAndFuseOptions tileAndFuseOptions;
-  tileAndFuseOptions.setTilingOptions(tilingOptions);
+  struct SliceListener : public RewriterBase::Listener {
+    void notifyOperationInserted(Operation* op,
+                                 OpBuilder::InsertPoint) override {
+      if (isa<tensor::ExtractSliceOp, tensor::InsertSliceOp,
+              tensor::ParallelInsertSliceOp>(op)) {
+        candidates.push_back(op);
+      }
+    }
 
-  // Tile Operation and Fuse it's Producers.
-  FailureOr<scf::SCFTileAndFuseResult> tiledResults =
-      scf::tileConsumerAndFuseProducersUsingSCF(rewriter, tilingOp,
-                                                tileAndFuseOptions);
+    void notifyOperationReplaced(Operation* op, ValueRange) override {
+      removeOp(op);
+    };
+
+    void notifyOperationErased(Operation* op) override { removeOp(op); };
+
+    void removeOp(Operation* op) {
+      auto it = llvm::find(candidates, op);
+      if (it != candidates.end()) {
+        candidates.erase(it);
+      }
+    }
+
+    std::deque<Operation*> candidates;
+  };
+
+  SliceListener listener;
+  rewriter.setListener(&listener);
+
+  FailureOr<scf::SCFTilingResult> tiledResults =
+      scf::tileUsingSCF(rewriter, tilingOp, tilingOptions);
   if (failed(tiledResults)) {
     return signalPassFailure();
   }
-
-  for (Value result : tilingOp->getResults()) {
-    rewriter.replaceAllUsesWith(result, tiledResults->replacements[result]);
-  }
-
-  // Fuse Consumers into the tiled operations.
-  std::queue<Operation*> candidates;
-  auto addCandidateSlices = [&candidates](Operation* fusedOp) {
-    for (Operation* userOp : fusedOp->getResults().getUsers()) {
-      if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(userOp)) {
-        candidates.push(userOp);
-      }
-    }
-  };
-
-  for (Operation* tiledOp : tiledResults->tiledAndFusedOps) {
-    addCandidateSlices(tiledOp);
-  }
+  rewriter.replaceOp(tilingOp, tiledResults->mergeResult.replacements);
 
   MutableArrayRef<LoopLikeOpInterface> loops = tiledResults->loops;
+  std::deque<Operation*>& candidates = listener.candidates;
   while (!candidates.empty()) {
-    Operation* candidateSliceOp = candidates.front();
-    candidates.pop();
+    Operation* candidate = candidates.front();
+    candidates.pop_front();
 
-    FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
-        mlir::scf::tileAndFuseConsumerOfSlice(rewriter, candidateSliceOp,
-                                              loops);
-    if (failed(fusedResult)) {
+    if (auto producerSlice = dyn_cast<tensor::ExtractSliceOp>(candidate)) {
+      if (candidate->getUsers().empty()) {
+        continue;
+      }
+      std::optional<scf::SCFFuseProducerOfSliceResult> fusedResult =
+          scf::tileAndFuseProducerOfSlice(rewriter, producerSlice, loops);
+    }
+
+    if (tilingLevel == tutorial::TilingLevel::Reduction) {
       continue;
     }
 
-    rewriter.replaceOp(fusedResult->origConsumerOperand->getOwner(),
-                       fusedResult->tiledOps.front());
+    if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(candidate)) {
+      FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
+          scf::tileAndFuseConsumerOfSlice(rewriter, candidate, loops);
 
-    addCandidateSlices(fusedResult->tiledAndFusedConsumerOperand->getOwner());
+      if (succeeded(fusedResult)) {
+        rewriter.replaceOp(fusedResult->origConsumerOperand->getOwner(),
+                           fusedResult->tiledOps.front());
+      }
+    }
   }
 
   // Cleanup.

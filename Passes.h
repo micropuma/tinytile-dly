@@ -5,7 +5,7 @@
 
 namespace mlir::tutorial {
 
-enum class TilingLevel { Parallel, Serial };
+enum class TilingLevel { Parallel, Reduction };
 
 #define GEN_PASS_DECL
 #include "Passes.h.inc"

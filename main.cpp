@@ -57,10 +57,10 @@ void createPassPipeline(PassManager &pm) {
     pm.addPass(tutorial::createTutorialTileAndFuse(options));
   }
 
-  // Serial tiling using scf.for
+  // Reduction tiling using scf.for
   {
     tutorial::TutorialTileAndFuseOptions options;
-    options.tilingLevel = tutorial::TilingLevel::Serial;
+    options.tilingLevel = tutorial::TilingLevel::Reduction;
     pm.addPass(tutorial::createTutorialTileAndFuse(options));
   }
 
@@ -79,7 +79,9 @@ void createPassPipeline(PassManager &pm) {
   {
     pm.addPass(tutorial::createTutorialVectorization());
     pm.addPass(createCanonicalizerPass());
+    pm.addPass(createCSEPass());
     pm.addPass(tensor::createFoldTensorSubsetOpsPass());
+    pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
   }
 
