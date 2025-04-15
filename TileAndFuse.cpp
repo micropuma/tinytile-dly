@@ -69,6 +69,14 @@ static SmallVector<OpFoldResult> getTilingSizes(DictionaryAttr loweringConfig,
   return SmallVector<OpFoldResult>{};
 }
 
+bool isDestinationSlice(tensor::ExtractSliceOp extractSliceOp) {
+  auto blockArg = dyn_cast<BlockArgument>(extractSliceOp.getSource());
+  if (blockArg && isa<scf::ForOp>(blockArg.getOwner()->getParentOp())) {
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 void TutorialTileAndFuse::runOnOperation() {
@@ -141,11 +149,18 @@ void TutorialTileAndFuse::runOnOperation() {
       if (candidate->getUsers().empty()) {
         continue;
       }
+      // Do not tile destination slices for reduction tiling.
+      producerSlice.dump();
+      if (tilingLevel == tutorial::TilingLevel::Reduction &&
+          isDestinationSlice(producerSlice)) {
+        continue;
+      }
       std::optional<scf::SCFFuseProducerOfSliceResult> fusedResult =
           scf::tileAndFuseProducerOfSlice(rewriter, producerSlice, loops);
     }
 
     if (tilingLevel == tutorial::TilingLevel::Reduction) {
+      // Do not do consumer fusion for reduction tiling.
       continue;
     }
 

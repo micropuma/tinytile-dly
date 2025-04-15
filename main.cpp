@@ -81,6 +81,7 @@ void createPassPipeline(PassManager &pm) {
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
     pm.addPass(tensor::createFoldTensorSubsetOpsPass());
+    pm.addPass(createLoopInvariantSubsetHoistingPass());
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
   }
