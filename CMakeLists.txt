@@ -30,9 +30,11 @@ add_definitions(${LLVM_DEFINITIONS})
 
 # TableGen
 
+add_mlir_dialect(Tutorial tutorial)
+
 set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls -name Tutorial)
-add_public_tablegen_target(TutorialIncGen)
+add_public_tablegen_target(TutorialPassIncGen)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -51,7 +53,14 @@ add_llvm_executable(tutorial-compiler
     main.cpp
     TileAndFuse.cpp
     Vectorization.cpp
-    ApplyTilingSpec.cpp)
+    ApplyTilingSpec.cpp
+    Tutorial.cpp
+
+    DEPENDS
+
+    TutorialPassIncGen
+    MLIRTutorialIncGen
+)
 
 llvm_update_compile_flags(tutorial-compiler)
 target_link_libraries(tutorial-compiler PRIVATE ${LIBS})

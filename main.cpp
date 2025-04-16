@@ -1,4 +1,5 @@
 #include "Passes.h"
+#include "Tutorial.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -153,6 +154,7 @@ LogicalResult tutorialOpt(int argc, char **argv) {
   registry.insert<index::IndexDialect>();
   registry.insert<affine::AffineDialect>();
   registry.insert<transform::TransformDialect>();
+  registry.insert<tutorial::TutorialDialect>();
 
   linalg::registerAllDialectInterfaceImplementations(registry);
   tensor::registerInferTypeOpInterfaceExternalModels(registry);

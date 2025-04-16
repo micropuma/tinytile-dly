@@ -1,6 +1,7 @@
 #include <queue>
 
 #include "Passes.h"
+#include "Tutorial.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -150,7 +151,6 @@ void TutorialTileAndFuse::runOnOperation() {
         continue;
       }
       // Do not tile destination slices for reduction tiling.
-      producerSlice.dump();
       if (tilingLevel == tutorial::TilingLevel::Reduction &&
           isDestinationSlice(producerSlice)) {
         continue;
