@@ -16,7 +16,7 @@ module attributes { transform.with_named_sequence } {
       %filter: !tfilter,
       %bias: !tbias,
       %output: !toutput)  -> !toutput
-    attributes { }
+//    attributes { transform_tiling_spec = "__halide" }
   {
     %bias_init = tensor.empty() : !toutput
     %biased = linalg.broadcast ins(%bias : !tbias)
