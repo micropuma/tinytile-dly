@@ -166,6 +166,7 @@ LogicalResult tutorialOpt(int argc, char **argv) {
       registry);
   vector::registerSubsetOpInterfaceExternalModels(registry);
   scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
+  affine::registerValueBoundsOpInterfaceExternalModels(registry);
 
   tensor::registerTransformDialectExtension(registry);
   scf::registerTransformDialectExtension(registry);

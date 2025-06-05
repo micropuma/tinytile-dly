@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.28)
 
 project(tutorial-compiler LANGUAGES CXX C)
 
@@ -59,7 +59,6 @@ add_llvm_executable(tutorial-compiler
     DEPENDS
 
     TutorialPassIncGen
-    MLIRTutorialIncGen
 )
 
 llvm_update_compile_flags(tutorial-compiler)
