@@ -59,7 +59,6 @@ add_llvm_executable(tutorial-compiler
     DEPENDS
 
     TutorialPassIncGen
-    MLIRTutorialIncGen
 )
 
 llvm_update_compile_flags(tutorial-compiler)
