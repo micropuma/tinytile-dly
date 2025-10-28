@@ -138,7 +138,7 @@ void TutorialTileAndFuse::runOnOperation() {
   if (failed(tiledResults)) {
     return signalPassFailure();
   }
-  rewriter.replaceOp(tilingOp, tiledResults->mergeResult.replacements);
+  rewriter.replaceOp(tilingOp, tiledResults->replacements);
 
   MutableArrayRef<LoopLikeOpInterface> loops = tiledResults->loops;
   std::deque<Operation*>& candidates = listener.candidates;
@@ -166,7 +166,7 @@ void TutorialTileAndFuse::runOnOperation() {
 
     if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(candidate)) {
       FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
-          scf::tileAndFuseConsumerOfSlice(rewriter, candidate, loops);
+          scf::tileAndFuseConsumerOfSlice(rewriter, candidate);
 
       if (succeeded(fusedResult)) {
         rewriter.replaceOp(fusedResult->origConsumerOperand->getOwner(),
@@ -185,7 +185,7 @@ void TutorialTileAndFuse::runOnOperation() {
   // into producers when possible.
   context->getLoadedDialect<tensor::TensorDialect>()
       ->getCanonicalizationPatterns(patterns);
-  if (failed(applyPatternsGreedily(funcOp, std::move(patterns)))) {
+  if (failed(applyPatternsAndFoldGreedily(funcOp, std::move(patterns)))) {
     return signalPassFailure();
   }
 }

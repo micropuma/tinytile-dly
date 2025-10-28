@@ -88,12 +88,12 @@ void createPassPipeline(PassManager &pm) {
   }
 
   // Bufferization
+  // TODO(leon): deep dive into bufferization details
   {
-    bufferization::OneShotBufferizePassOptions options;
+    bufferization::OneShotBufferizationOptions options;
     options.bufferizeFunctionBoundaries = true;
-    options.functionBoundaryTypeConversion =
-        bufferization::LayoutMapOption::IdentityLayoutMap;
-    pm.addPass(bufferization::createOneShotBufferizePass(options));
+    // options.functionBoundaryTypeConversion = bufferization::LayoutMapOption::IdentityLayoutMap;
+    pm.addPass(bufferization::createOneShotBufferizePass());
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
     pm.addPass(memref::createFoldMemRefAliasOpsPass());

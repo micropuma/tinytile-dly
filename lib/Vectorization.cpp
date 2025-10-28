@@ -45,7 +45,7 @@ void TutorialVectorization::runOnOperation() {
     vector::TransferWriteOp::getCanonicalizationPatterns(vectorizationPatterns,
                                                          funcOp.getContext());
     if (failed(
-            applyPatternsGreedily(funcOp, std::move(vectorizationPatterns)))) {
+            applyPatternsAndFoldGreedily(funcOp, std::move(vectorizationPatterns)))) {
       return signalPassFailure();
     }
   }
