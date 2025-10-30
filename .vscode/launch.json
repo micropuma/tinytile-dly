@@ -1,0 +1,24 @@
+{
+    "version": "0.1.0",
+    "configurations": [
+        {
+            "name": "Tutorial-compiler Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/douliyang/large/mlir-workspace/tinytile-dly/build/bin/tutorial-compiler",
+            "args": [
+                    "/home/douliyang/large/mlir-workspace/tinytile-dly/test/example.mlir",
+            ],
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "cwd": "/home/douliyang/large/mlir-workspace/tinytile-dly",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+        },
+    ]
+}
