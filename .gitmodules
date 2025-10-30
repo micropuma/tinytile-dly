@@ -1,0 +1,8 @@
+[submodule "third_party/llvm-project"]
+  path = third_party/llvm-project
+  url = https://github.com/micropuma/llvm-project-tinytile.git
+  shallow = true
+  ignore = dirty
+[submodule "third_party/llvm"]
+	path = third_party/llvm
+	url = git@github.com:micropuma/llvm-project-tinytile.git
