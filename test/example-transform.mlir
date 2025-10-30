@@ -1,5 +1,3 @@
-// Remove the "transform_tiling_spec" attribute and uncomment the lowering
-// config to try out the pass pipeline tiling
 #config = {
   parallel = [1, 1, 5, 64],
   reduction = [0, 0, 0, 0, 1, 1, 1]
@@ -16,7 +14,7 @@ module attributes { transform.with_named_sequence } {
       %filter: !tfilter,
       %bias: !tbias,
       %output: !toutput)  -> !toutput
-//    attributes { transform_tiling_spec = "__halide" }
+   attributes { transform_tiling_spec = "__halide" }
   {
     %bias_init = tensor.empty() : !toutput
     %biased = linalg.broadcast ins(%bias : !tbias)

@@ -105,6 +105,7 @@ void TutorialTileAndFuse::runOnOperation() {
     tilingOptions.setLoopType(scf::SCFTilingOptions::LoopType::ForOp);
   }
 
+  // 监控tiling的过程中产生的slice操作，以便后续进行融合。
   struct SliceListener : public RewriterBase::Listener {
     void notifyOperationInserted(Operation* op,
                                  OpBuilder::InsertPoint) override {
@@ -133,6 +134,8 @@ void TutorialTileAndFuse::runOnOperation() {
   SliceListener listener;
   rewriter.setListener(&listener);
 
+  // 实际的tiling 执行
+  // 关注：（1）tileResults返回值（2）tileUsingSCF的具体实现
   FailureOr<scf::SCFTilingResult> tiledResults =
       scf::tileUsingSCF(rewriter, tilingOp, tilingOptions);
   if (failed(tiledResults)) {
@@ -142,6 +145,7 @@ void TutorialTileAndFuse::runOnOperation() {
 
   MutableArrayRef<LoopLikeOpInterface> loops = tiledResults->loops;
   std::deque<Operation*>& candidates = listener.candidates;
+  // 尝试fusing producer/consumer into tile loops
   while (!candidates.empty()) {
     Operation* candidate = candidates.front();
     candidates.pop_front();
@@ -155,6 +159,8 @@ void TutorialTileAndFuse::runOnOperation() {
           isDestinationSlice(producerSlice)) {
         continue;
       }
+
+      // 尝试将producer fuse进tile loops
       std::optional<scf::SCFFuseProducerOfSliceResult> fusedResult =
           scf::tileAndFuseProducerOfSlice(rewriter, producerSlice, loops);
     }
@@ -164,6 +170,7 @@ void TutorialTileAndFuse::runOnOperation() {
       continue;
     }
 
+    // 将consumer fuse进tile loops
     if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(candidate)) {
       FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
           scf::tileAndFuseConsumerOfSlice(rewriter, candidate);
@@ -180,6 +187,7 @@ void TutorialTileAndFuse::runOnOperation() {
       linalg::getLinalgTilingCanonicalizationPatterns(context);
   scf::populateSCFForLoopCanonicalizationPatterns(patterns);
   tensor::populateFoldTensorEmptyPatterns(patterns);
+  // 处理<1x2x2>变成<2x2>这种rank-reduced的情况
   memref::populateResolveRankedShapedTypeResultDimsPatterns(patterns);
   // Pull in tensor dialect canonicalization patterns to fold tensor.cast
   // into producers when possible.

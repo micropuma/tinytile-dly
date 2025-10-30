@@ -15,6 +15,7 @@ def Tutorial_Dialect : Dialect {
   }];
 }
 
+// 主要用于演示TilingInterface接口的实现
 def Tutorial_DequantOp : Op<Tutorial_Dialect,
                               "dequant",
   [Pure,

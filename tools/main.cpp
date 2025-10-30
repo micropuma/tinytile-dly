@@ -52,6 +52,7 @@ void createPassPipeline(PassManager &pm) {
   { pm.addPass(tutorial::createTutorialApplyTilingSpec()); }
 
   // Parallel tiling using scf.forall
+  // TODO(leon): deep dive here
   {
     tutorial::TutorialTileAndFuseOptions options;
     options.tilingLevel = tutorial::TilingLevel::Parallel;
@@ -77,8 +78,11 @@ void createPassPipeline(PassManager &pm) {
   }
 
   // Vectorization
+  // TODO(leon): deep dive here
   {
     pm.addPass(tutorial::createTutorialVectorization());
+
+    // followed by cleanups
     pm.addPass(createCanonicalizerPass());
     pm.addPass(createCSEPass());
     pm.addPass(tensor::createFoldTensorSubsetOpsPass());
@@ -88,7 +92,7 @@ void createPassPipeline(PassManager &pm) {
   }
 
   // Bufferization
-  // TODO(leon): deep dive into bufferization details
+  // TODO(leon): deep dive here
   {
     bufferization::OneShotBufferizationOptions options;
     options.bufferizeFunctionBoundaries = true;

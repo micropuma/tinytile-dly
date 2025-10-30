@@ -15,8 +15,7 @@ module {
       %bias: !tbias,
       %output: !toutput)  -> !toutput {
     %bias_init = tensor.empty() : !toutput
-    %biased = linalg.broadcast ins(%bias : !tbias)
-      outs(%bias_init : !toutput) dimensions = [0, 1, 2]
+    %biased = linalg.broadcast ins(%bias : !tbias) outs(%bias_init : !toutput) dimensions = [0, 1, 2]
 
     %convolved = linalg.generic {
       iterator_types = ["parallel", "parallel", "parallel", "parallel",
