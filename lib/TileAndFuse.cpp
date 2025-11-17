@@ -2,6 +2,7 @@
 
 #include "Passes.h"
 #include "Tutorial.h"
+#include "Listener.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -104,32 +105,6 @@ void TutorialTileAndFuse::runOnOperation() {
   } else {
     tilingOptions.setLoopType(scf::SCFTilingOptions::LoopType::ForOp);
   }
-
-  // 监控tiling的过程中产生的slice操作，以便后续进行融合。
-  struct SliceListener : public RewriterBase::Listener {
-    void notifyOperationInserted(Operation* op,
-                                 OpBuilder::InsertPoint) override {
-      if (isa<tensor::ExtractSliceOp, tensor::InsertSliceOp,
-              tensor::ParallelInsertSliceOp>(op)) {
-        candidates.push_back(op);
-      }
-    }
-
-    void notifyOperationReplaced(Operation* op, ValueRange) override {
-      removeOp(op);
-    };
-
-    void notifyOperationErased(Operation* op) override { removeOp(op); };
-
-    void removeOp(Operation* op) {
-      auto it = llvm::find(candidates, op);
-      if (it != candidates.end()) {
-        candidates.erase(it);
-      }
-    }
-
-    std::deque<Operation*> candidates;
-  };
 
   SliceListener listener;
   rewriter.setListener(&listener);
