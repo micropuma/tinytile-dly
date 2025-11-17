@@ -3,10 +3,10 @@
 # LLVM 自动化构建 + 安装脚本
 
 # 1. 基本配置变量
-BUILD_DIR="./build"               # 构建目录
-SRC_DIR="../llvm"                 # LLVM 源码路径
-INSTALL_DIR="../install"          # ✅ 安装目录
-BUILD_TYPE="Debug"                # Debug / Release
+BUILD_DIR="./build"               
+SRC_DIR="../llvm"                
+INSTALL_DIR="../install"          
+BUILD_TYPE="Debug"                
 ENABLE_ASSERTIONS="ON"
 ENABLE_PROJECTS="mlir;llvm;lld"
 TARGETS_TO_BUILD="host"
@@ -32,7 +32,7 @@ cmake -G Ninja \
     -DLLVM_ENABLE_ASSERTIONS=$ENABLE_ASSERTIONS \
     -DLLVM_ENABLE_PROJECTS=$ENABLE_PROJECTS \
     -DLLVM_TARGETS_TO_BUILD=$TARGETS_TO_BUILD \
-    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \         # ✅ 指定安装目录
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR
     $SRC_DIR
 
 if [ $? -ne 0 ]; then

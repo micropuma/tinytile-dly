@@ -40,7 +40,8 @@ echo "⚙️ 运行 CMake..."
 cmake .. \
   -DMLIR_DIR="$MLIR_DIR" \
   -DLLVM_DIR="$LLVM_DIR" \
-  -DCMAKE_BUILD_TYPE=Debug 
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DLLVM_ENABLE_ASSERTIONS=ON
 
 # === 编译 ===
 echo "🚀 开始编译..."
