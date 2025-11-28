@@ -5,6 +5,7 @@ set(SRC_FILES
     Vectorization.cpp
     ApplyTilingSpec.cpp
     Tutorial.cpp
+    SliceListener.cpp
 )
 
 add_mlir_library(TutorialLib
