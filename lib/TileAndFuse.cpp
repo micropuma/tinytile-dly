@@ -2,7 +2,7 @@
 
 #include "Passes.h"
 #include "Tutorial.h"
-#include "Listener.h"
+#include "SliceListener.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -14,6 +14,9 @@
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/Tensor/Transforms/Transforms.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "tile-and-fuse"
 
 namespace mlir::tutorial {
 
@@ -28,6 +31,7 @@ class TutorialTileAndFuse final
   void runOnOperation() override;
 };
 
+// 获取funcOp的rooting tiling op（带有lowering_config属性的op）
 static FailureOr<TilingInterface> getLoweringConfigOp(func::FuncOp funcOp) {
   TilingInterface tilingOp;
   funcOp.walk([&](Operation* op) {
@@ -92,12 +96,14 @@ void TutorialTileAndFuse::runOnOperation() {
   }
 
   TilingInterface tilingOp = maybeTilingOp.value();
+  LLVM_DEBUG(llvm::dbgs() << "Tiling operation: " << tilingOp << "\n";);
   SmallVector<OpFoldResult> tileSizes = getTilingSizes(
       tilingOp->getAttrOfType<DictionaryAttr>("lowering_config"), tilingLevel);
   auto zero = rewriter.getIndexAttr(0);
   int64_t numLoops = tilingOp.getLoopIteratorTypes().size();
   tileSizes.resize(numLoops, zero);
 
+  // use scftiling options to help tiling
   scf::SCFTilingOptions tilingOptions;
   tilingOptions.setTileSizes(tileSizes);
   if (tilingLevel == tutorial::TilingLevel::Parallel) {
@@ -118,8 +124,17 @@ void TutorialTileAndFuse::runOnOperation() {
   }
   rewriter.replaceOp(tilingOp, tiledResults->replacements);
 
+  LLVM_DEBUG(llvm::dbgs() << "Current FuncOp is: " << funcOp << "\n";);
+
+  // do fusing producer/consumer into tile loops
   MutableArrayRef<LoopLikeOpInterface> loops = tiledResults->loops;
   std::deque<Operation*>& candidates = listener.candidates;
+
+  LLVM_DEBUG(llvm::dbgs() << "Number of candidates for fusion: " << candidates.size() << "\n";);
+  for (const auto& candidate : candidates) {
+    LLVM_DEBUG(llvm::dbgs() << "Candidate for fusion: " << *candidate << "\n";);
+  }
+
   // 尝试fusing producer/consumer into tile loops
   while (!candidates.empty()) {
     Operation* candidate = candidates.front();
@@ -140,6 +155,8 @@ void TutorialTileAndFuse::runOnOperation() {
           scf::tileAndFuseProducerOfSlice(rewriter, producerSlice, loops);
     }
 
+    LLVM_DEBUG(llvm::dbgs() << "After producer fusion " << funcOp << "\n";);
+
     if (tilingLevel == tutorial::TilingLevel::Reduction) {
       // Do not do consumer fusion for reduction tiling.
       continue;
@@ -155,6 +172,8 @@ void TutorialTileAndFuse::runOnOperation() {
                            fusedResult->tiledOps.front());
       }
     }
+
+    LLVM_DEBUG(llvm::dbgs() << "After consumer fusion " << funcOp << "\n";);
   }
 
   // Cleanup.

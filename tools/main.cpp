@@ -51,8 +51,8 @@ void createPassPipeline(PassManager &pm) {
   // Apply required transform spec.
   { pm.addPass(tutorial::createTutorialApplyTilingSpec()); }
 
+  // ================ Tiling for two levels: parallel and reduction ================ 
   // Parallel tiling using scf.forall
-  // TODO(leon): deep dive here
   {
     tutorial::TutorialTileAndFuseOptions options;
     options.tilingLevel = tutorial::TilingLevel::Parallel;
@@ -160,6 +160,7 @@ LogicalResult tutorialOpt(int argc, char **argv) {
   registry.insert<transform::TransformDialect>();
   registry.insert<tutorial::TutorialDialect>();
 
+  // Register interface implementations.
   linalg::registerAllDialectInterfaceImplementations(registry);
   tensor::registerInferTypeOpInterfaceExternalModels(registry);
   vector::registerBufferizableOpInterfaceExternalModels(registry);

@@ -22,6 +22,7 @@ def TutorialVectorization : Pass<"tutorial-vectorization", "func::FuncOp"> {
   let dependentDialects = ["linalg::LinalgDialect", "vector::VectorDialect"];
 }
 
+// 通过transform dialect完成tiling pass
 def TutorialApplyTilingSpec : Pass<"tutorial-apply-tiling-spec", "ModuleOp"> {
   let summary = "";
   let dependentDialects = ["transform::TransformDialect"];
