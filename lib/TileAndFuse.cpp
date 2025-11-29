@@ -150,12 +150,13 @@ void TutorialTileAndFuse::runOnOperation() {
         continue;
       }
 
+      LLVM_DEBUG(llvm::dbgs() << "candidate is: " << *candidate << "\n";);
+
       // 尝试将producer fuse进tile loops
       std::optional<scf::SCFFuseProducerOfSliceResult> fusedResult =
           scf::tileAndFuseProducerOfSlice(rewriter, producerSlice, loops);
+      LLVM_DEBUG(llvm::dbgs() << "After producer fusion " << funcOp << "\n";);
     }
-
-    LLVM_DEBUG(llvm::dbgs() << "After producer fusion " << funcOp << "\n";);
 
     if (tilingLevel == tutorial::TilingLevel::Reduction) {
       // Do not do consumer fusion for reduction tiling.
@@ -164,16 +165,16 @@ void TutorialTileAndFuse::runOnOperation() {
 
     // 将consumer fuse进tile loops
     if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(candidate)) {
+      LLVM_DEBUG(llvm::dbgs() << "candidate is: " << *candidate << "\n";);
       FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
           scf::tileAndFuseConsumerOfSlice(rewriter, candidate);
 
       if (succeeded(fusedResult)) {
         rewriter.replaceOp(fusedResult->origConsumerOperand->getOwner(),
                            fusedResult->tiledOps.front());
+        LLVM_DEBUG(llvm::dbgs() << "After consumer fusion " << funcOp << "\n";);
       }
     }
-
-    LLVM_DEBUG(llvm::dbgs() << "After consumer fusion " << funcOp << "\n";);
   }
 
   // Cleanup.

@@ -8,6 +8,7 @@
 !tbias = tensor<128xf32>
 !toutput = tensor<5x80x100x128xf32>
 
+// NHWC × HWCF -> NHWC
 module {
   func.func @conv(
       %input: !tinput,
@@ -27,7 +28,7 @@ module {
       ]
     } 
     ins(%filter, %input: !tfilter, !tinput) outs(%biased : !toutput)
-    attrs = { lowering_config = #config } {
+    attrs = { lowering_config = #config } {    // a tiling interface with a lowering config
     ^bb0(%in: f32, %f: f32, %b: f32):
       %m1 = arith.mulf %in, %f  : f32
       %0 = arith.addf %b, %m1  : f32
