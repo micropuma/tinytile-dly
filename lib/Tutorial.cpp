@@ -16,6 +16,7 @@ void mlir::tutorial::TutorialDialect::initialize() {
 
 namespace mlir::tutorial {
 
+// 获取DequantOp操作的迭代区间
 SmallVector<Range> DequantOp::getIterationDomain(OpBuilder &b) {
   int64_t rank = getInput().getType().getRank();
   OpFoldResult zero = b.getIndexAttr(0);
@@ -34,6 +35,7 @@ SmallVector<Range> DequantOp::getIterationDomain(OpBuilder &b) {
   return loopBounds;
 }
 
+// 获取DequantOp操作的迭代器类型
 SmallVector<utils::IteratorType> DequantOp::getLoopIteratorTypes() {
   int64_t rank = getInput().getType().getRank();
   return SmallVector<utils::IteratorType>(rank, utils::IteratorType::parallel);
@@ -48,11 +50,13 @@ LogicalResult DequantOp::getResultTilePosition(
   return success();
 }
 
+// 核心操作，实现DequantOp的tiling
 FailureOr<TilingResult> DequantOp::getTiledImplementation(
     OpBuilder &b, ArrayRef<OpFoldResult> offsets,
     ArrayRef<OpFoldResult> sizes) {
   Location loc = getLoc();
   int64_t rank = getInput().getType().getRank();
+  // 在dequant操作中，默认stride都是1
   SmallVector<OpFoldResult> strides(rank, b.getI64IntegerAttr(1));
 
   auto inputTile = b.create<tensor::ExtractSliceOp>(loc, getInput(), offsets,
@@ -70,6 +74,7 @@ FailureOr<TilingResult> DequantOp::getTiledImplementation(
                       {inputTile, scaleTile}};
 }
 
+// 为了计算结果的offsets和sizes，返回iteration domain的相应坐标
 LogicalResult DequantOp::getIterationDomainTileFromResultTile(
     OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
     ArrayRef<OpFoldResult> sizes,
@@ -83,6 +88,7 @@ LogicalResult DequantOp::getIterationDomainTileFromResultTile(
 FailureOr<TilingResult> DequantOp::generateResultTileValue(
     OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
     ArrayRef<OpFoldResult> sizes) {
+  // 先由结果坐标获取iteration domain的坐标，然后调用getTiledImplementation完成tiling
   SmallVector<OpFoldResult> mappedOffsets, mappedSizes;
   if (failed(getIterationDomainTileFromResultTile(
           b, resultNumber, offsets, sizes, mappedOffsets, mappedSizes))) {
@@ -91,11 +97,13 @@ FailureOr<TilingResult> DequantOp::generateResultTileValue(
   return getTiledImplementation(b, mappedOffsets, mappedSizes);
 }
 
+// 有目前的输入坐标，获取结果iteration domain
 LogicalResult DequantOp::getIterationDomainTileFromOperandTile(
     OpBuilder &b, unsigned operandNumber, ArrayRef<OpFoldResult> offsets,
     ArrayRef<OpFoldResult> sizes,
     SmallVectorImpl<OpFoldResult> &iterDomainOffsets,
     SmallVectorImpl<OpFoldResult> &iterDomainSizes) {
+  // dequant操作比较简单，就是1:1 mapping即可
   iterDomainOffsets = llvm::to_vector(offsets);
   iterDomainSizes = llvm::to_vector(sizes);
   return success();
