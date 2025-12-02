@@ -20,5 +20,26 @@
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb",
         },
+
+        {
+            "name": "Bufferization Pipeline Debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/douliyang/large/mlir-workspace/tinytile-dly/third_party/llvm/build/bin/mlir-opt",
+            "args": [
+                    "--one-shot-bufferize",
+                    "/home/douliyang/large/mlir-workspace/tinytile-dly/tutorial/bufferization/debug/example.mlir",
+            ],
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "cwd": "/home/douliyang/large/mlir-workspace/tinytile-dly",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+        },
     ]
 }
