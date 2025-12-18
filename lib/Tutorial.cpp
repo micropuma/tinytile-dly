@@ -380,4 +380,32 @@ FailureOr<TilingResult> ReluOpDPS::getTiledImplementationFromOperandTile(
   return getTiledImplementation(b, mappedOffsets, mappedSizes);
 }
 
+// memory effects interface  
+void tutorial::ReluOpDPS::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>> &effects) {
+  
+  // 1. 如果操作的是 Tensor，我们要模仿 Pure 的行为
+  //    但是在 MemoryEffects 接口中，如果没有任何 Effect 被添加，
+  //    它就默认被视为无副作用 (Pure)。
+  //    只有当我们操作 MemRef 时，才显式添加 Write/Read Effect。
+  
+  if (hasPureTensorSemantics()) {
+    // Tensor 模式下是 Pure 的，什么都不做，列表为空即可。
+    // 或者显式声明 Allocate 效果给 result (比较少见，通常留空即可)
+    return;
+  }
+
+  // 2. 如果操作的是 MemRef (Bufferization 之后)
+  // Input 是读
+  for (Value value : getDpsInputs()) {
+    effects.emplace_back(MemoryEffects::Read::get(), SideEffects::DefaultResource::get());
+  }
+  
+  // Output (Outs) 是写 (也可能是读，取决于 Op 语义，Relu 是覆盖写，但声明为 ReadWrite 更安全)
+  for (Value value : getDpsInits()) {
+    effects.emplace_back(MemoryEffects::Write::get(), SideEffects::DefaultResource::get());
+    effects.emplace_back(MemoryEffects::Read::get(), SideEffects::DefaultResource::get());
+  }
+}
+
 }  // namespace mlir::tutorial

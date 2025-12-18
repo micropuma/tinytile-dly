@@ -84,7 +84,7 @@ def Tutorial_ReluOp : Tutorial_Op<"relu",
 // 3. verifier，确保input/output shape一致
 // 4. folder，用来完成canonicalization
 def Tutorial_ReluOpDPS : Tutorial_Op<"relu_dps",
-  [Pure,  
+  [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,    // 内存效果接口
    DestinationStyleOpInterface,   // DPS模式接口
    PredOpTrait<"input and output have same element type", TCopVTEtIsSameAs<0, 1>>,    // trait，确保input/output element type一致
    DeclareOpInterfaceMethods<TilingInterface,         // 由于是DPS模式，所以不需要generateResultTileValue等方法

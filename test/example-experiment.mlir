@@ -17,9 +17,6 @@ module {
       %output: !toutput)  -> !toutput {
     %bias_init = tensor.empty() : !toutput
     %biased = linalg.broadcast ins(%bias : !tbias) outs(%bias_init : !toutput) dimensions = [0, 1, 2]
-
-    %input_relu = tutorial.relu %input : !tinput , !tinput
-
     %convolved = linalg.generic {
       iterator_types = ["parallel", "parallel", "parallel", "parallel",
                         "reduction", "reduction", "reduction"],
@@ -29,7 +26,7 @@ module {
         affine_map<(n, y, x, c, rz, ry, rx) -> (n, y, x, c)>
       ]
     } 
-    ins(%filter, %input_relu: !tfilter, !tinput) outs(%biased : !toutput)
+    ins(%filter, %input: !tfilter, !tinput) outs(%biased : !toutput)
     attrs = { lowering_config = #config } {    // a tiling interface with a lowering config
     ^bb0(%in: f32, %f: f32, %b: f32):
       %m1 = arith.mulf %in, %f  : f32
