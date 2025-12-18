@@ -95,7 +95,7 @@ def Tutorial_ReluOpDPS : Tutorial_Op<"relu_dps",
        "generateResultTileValue",
        "getIterationDomainTileFromResultTile",
        "getIterationDomainTileFromOperandTile",
-       "getTiledImplementationFromOperandTile"]> 
+       "getTiledImplementationFromOperandTile"]>
   ]> {
   let summary = "Relu operation in destination passing style";
   let arguments = (ins

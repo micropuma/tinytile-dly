@@ -6,6 +6,7 @@ set(SRC_FILES
     ApplyTilingSpec.cpp
     Tutorial.cpp
     SliceListener.cpp
+    BufferizableOpInterfaceImpl.cpp
 )
 
 add_mlir_library(TutorialLib

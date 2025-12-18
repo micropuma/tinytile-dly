@@ -1,5 +1,7 @@
 #include "Passes.h"
 #include "Tutorial.h"
+#include "BufferizableOpInterfaceImpl.h"
+
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -163,12 +165,16 @@ LogicalResult tutorialOpt(int argc, char **argv) {
   // Register interface implementations.
   linalg::registerAllDialectInterfaceImplementations(registry);
   tensor::registerInferTypeOpInterfaceExternalModels(registry);
+
+  // Register bufferizable op interface models.
+  tutorial::registerBufferizableOpInterfaceExternalModels(registry);
   vector::registerBufferizableOpInterfaceExternalModels(registry);
   arith::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
   scf::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
+
   vector::registerSubsetOpInterfaceExternalModels(registry);
   scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
   affine::registerValueBoundsOpInterfaceExternalModels(registry);
