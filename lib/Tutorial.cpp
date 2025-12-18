@@ -120,4 +120,264 @@ FailureOr<TilingResult> DequantOp::getTiledImplementationFromOperandTile(
   return getTiledImplementation(b, mappedOffsets, mappedSizes);
 }
 
+// BufferizableOpInterface的实现
+bool DequantOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  // 判断这个 operand 是否会被 buffer 读取
+  return false;
+}
+
+bool DequantOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  // 判断这个 operand 是否会被 buffer 写入
+  return false;
+}
+
+bufferization::AliasingValueList DequantOp::getAliasingValues(
+    OpOperand &opOperand, const mlir::bufferization::AnalysisState &state) 
+{
+  return {};
+}
+
+LogicalResult DequantOp::bufferize(
+    RewriterBase &rewriter, const bufferization::BufferizationOptions &state) {
+  // 这里是真正的 bufferize 操作，把 tensor -> memref
+  // TODO(leon): 如何将dequant操作land到memref层级上的composed-op
+  return success();
+}
+
+// ========================== Tiling Op的实现示例 ==========================
+// 实现ReluOp的tiling接口
+// 获取ReluOp操作的迭代区间
+SmallVector<Range> ReluOp::getIterationDomain(OpBuilder &b) {
+  int64_t rank = getInput().getType().getRank();
+  OpFoldResult zero = b.getIndexAttr(0);
+  OpFoldResult one = b.getIndexAttr(1);
+
+  SmallVector<OpFoldResult> sizes =
+      tensor::getMixedSizes(b, getLoc(), getInput());
+
+  SmallVector<Range> loopBounds(rank);
+  for (auto dim : llvm::seq<int64_t>(rank)) {
+    loopBounds[dim].offset = zero;
+    loopBounds[dim].size = sizes[dim];
+    loopBounds[dim].stride = one;
+  }
+
+  return loopBounds;
+}
+
+// 获取ReluOp操作的迭代器类型
+// reluop是逐元素类型，所有维度均为parallel
+SmallVector<utils::IteratorType> ReluOp::getLoopIteratorTypes() {
+  int64_t rank = getInput().getType().getRank();
+  return SmallVector<utils::IteratorType>(rank, utils::IteratorType::parallel);
+}
+
+LogicalResult ReluOp::getResultTilePosition(
+    OpBuilder &builder, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes, SmallVector<OpFoldResult> &resultOffsets,
+    SmallVector<OpFoldResult> &resultSizes) {
+  resultOffsets = llvm::to_vector(offsets);
+  resultSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+// 核心操作，实现ReluOp的tiling
+FailureOr<TilingResult> ReluOp::getTiledImplementation(
+    OpBuilder &b, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  Location loc = getLoc();
+  int64_t rank = getInput().getType().getRank();
+  // 在dequant操作中，默认stride都是1
+  SmallVector<OpFoldResult> strides(rank, b.getI64IntegerAttr(1));
+
+  // 去除一小块tile做计算
+  auto inputTile = b.create<tensor::ExtractSliceOp>(loc, getInput(), offsets,
+                                                    sizes, strides);
+
+  Type resultType = inputTile.getResultType();
+
+  Operation *tiledOp =
+      mlir::clone(b, getOperation(), {resultType}, {inputTile});
+
+  return TilingResult{{tiledOp},
+                      SmallVector<Value>(tiledOp->getResults()),
+                      {inputTile}};
+}
+
+// 为了计算结果的offsets和sizes，返回iteration domain的相应坐标
+LogicalResult ReluOp::getIterationDomainTileFromResultTile(
+    OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    SmallVectorImpl<OpFoldResult> &iterDomainOffsets,
+    SmallVectorImpl<OpFoldResult> &iterDomainSizes) {
+  iterDomainOffsets = llvm::to_vector(offsets);
+  iterDomainSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+// 根据结果推断如何做tiling，符合将consumer tile好，fuse producer into consumer
+FailureOr<TilingResult> ReluOp::generateResultTileValue(
+    OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  // 先由结果坐标获取iteration domain的坐标，然后调用getTiledImplementation完成tiling
+  SmallVector<OpFoldResult> mappedOffsets, mappedSizes;
+  if (failed(getIterationDomainTileFromResultTile(
+          b, resultNumber, offsets, sizes, mappedOffsets, mappedSizes))) {
+    return failure();
+  }
+  // 获取tiling后的consumer的offsets & size map
+  return getTiledImplementation(b, mappedOffsets, mappedSizes);
+}
+
+// 从目前的输入坐标，获取结果iteration domain
+LogicalResult ReluOp::getIterationDomainTileFromOperandTile(
+    OpBuilder &b, unsigned operandNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    SmallVectorImpl<OpFoldResult> &iterDomainOffsets,
+    SmallVectorImpl<OpFoldResult> &iterDomainSizes) {
+  // relu操作比较简单，就是1:1 mapping即可
+  iterDomainOffsets = llvm::to_vector(offsets);
+  iterDomainSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+// 由输入推断op如何做tiling
+// 符合将producer tile好，fuse producer into consumer，给consumer做相应的tiling
+FailureOr<TilingResult> ReluOp::getTiledImplementationFromOperandTile(
+    OpBuilder &b, unsigned operandNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  SmallVector<OpFoldResult> mappedOffsets, mappedSizes;
+  if (failed(getIterationDomainTileFromOperandTile(
+          b, operandNumber, offsets, sizes, mappedOffsets, mappedSizes))) {
+    return failure();
+  }
+  return getTiledImplementation(b, mappedOffsets, mappedSizes);
+}
+
+// ========================== DPS + Tiling + BufferizableOpInterface的实现示例 ==========================
+LogicalResult ReluOpDPS::verify() {
+  // 注意，relu目前要求必须是ranked tensor类型
+  // 照抄Linalg_softmaxOp的verifier实现
+  ShapedType inputType = getInputOperandType();
+  ShapedType outputType = getOutputOperandType();
+
+  // TODO(leon): 为什么使用shapedtype而不是直接使用rankedtensor？
+  if (!inputType.hasRank() || !outputType.hasRank()) {
+    return emitOpError("input and output must be ranked tensor types");
+  }
+
+  ArrayRef<int64_t> inputShape = inputType.getShape();
+  ArrayRef<int64_t> outputShape = outputType.getShape();
+  if (failed(verifyCompatibleShape(inputShape, outputShape)))
+    return emitOpError("incompatible output shape");
+  return success();
+}
+
+SmallVector<Range> ReluOpDPS::getIterationDomain(OpBuilder &b) {
+  int64_t rank = getInputOperandRank();
+  OpFoldResult zero = b.getIndexAttr(0);
+  OpFoldResult one = b.getIndexAttr(1);
+
+  SmallVector<OpFoldResult> sizes =
+      tensor::getMixedSizes(b, getLoc(), getInput());
+
+  SmallVector<Range> loopBounds(rank);
+  for (auto dim : llvm::seq<int64_t>(rank)) {
+    loopBounds[dim].offset = zero;
+    loopBounds[dim].size = sizes[dim];
+    loopBounds[dim].stride = one;
+  }
+
+  return loopBounds;
+}
+
+SmallVector<utils::IteratorType> ReluOpDPS::getLoopIteratorTypes() {
+  int64_t rank = getInputOperandRank();
+  return SmallVector<utils::IteratorType>(rank, utils::IteratorType::parallel);
+}
+
+LogicalResult ReluOpDPS::getResultTilePosition(
+    OpBuilder &builder, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes, SmallVector<OpFoldResult> &resultOffsets,
+    SmallVector<OpFoldResult> &resultSizes) {
+  resultOffsets = llvm::to_vector(offsets);
+  resultSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+// 注意这里和非DPS版本的区别
+// 而且为了后续的bufferization，还需要同时考虑tensor type和memref type
+FailureOr<TilingResult> ReluOpDPS::getTiledImplementation(
+    OpBuilder &b, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  Location loc = getLoc();
+  int64_t rank = getInputOperandRank();
+  SmallVector<OpFoldResult> strides(rank, b.getI64IntegerAttr(1));
+
+  auto inputTile = b.create<tensor::ExtractSliceOp>(loc, getInput(), offsets,
+                                                    sizes, strides);
+  // DPS模式下，还需要对output做slice
+  auto outputTile = b.create<tensor::ExtractSliceOp>(loc, getOutput(), offsets,
+                                                     sizes, strides);
+
+  SmallVector<Type> resultTypes;
+  // DestinationStypeOpInterface提供的接口
+  if (hasPureTensorSemantics()) {
+    resultTypes.push_back(outputTile.getResultType());
+  }
+
+  Operation *tiledOp =
+      mlir::clone(b, getOperation(), resultTypes, {inputTile, outputTile});
+
+  return TilingResult{{tiledOp},
+                      SmallVector<Value>(tiledOp->getResults()),
+                      {inputTile, outputTile}};
+}
+
+// 为了计算结果的offsets和sizes，返回iteration domain的相应坐标
+LogicalResult ReluOpDPS::getIterationDomainTileFromResultTile(
+    OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    SmallVectorImpl<OpFoldResult> &iterDomainOffsets,
+    SmallVectorImpl<OpFoldResult> &iterDomainSizes) {
+  iterDomainOffsets = llvm::to_vector(offsets);
+  iterDomainSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+// 根据结果推断如何做tiling，符合将consumer tile好，fuse producer into consumer
+FailureOr<TilingResult> ReluOpDPS::generateResultTileValue(
+    OpBuilder &b, unsigned resultNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  SmallVector<OpFoldResult> mappedOffsets, mappedSizes;
+  if (failed(getIterationDomainTileFromResultTile(
+          b, resultNumber, offsets, sizes, mappedOffsets, mappedSizes))) {
+    return failure();
+  }
+  return getTiledImplementation(b, mappedOffsets, mappedSizes);
+}
+
+LogicalResult ReluOpDPS::getIterationDomainTileFromOperandTile(
+    OpBuilder &b, unsigned operandNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes,
+    SmallVectorImpl<OpFoldResult> &iterDomainOffsets,
+    SmallVectorImpl<OpFoldResult> &iterDomainSizes) {
+  iterDomainOffsets = llvm::to_vector(offsets);
+  iterDomainSizes = llvm::to_vector(sizes);
+  return success();
+}
+
+FailureOr<TilingResult> ReluOpDPS::getTiledImplementationFromOperandTile(
+    OpBuilder &b, unsigned operandNumber, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes) {
+  SmallVector<OpFoldResult> mappedOffsets, mappedSizes;
+  if (failed(getIterationDomainTileFromOperandTile(
+          b, operandNumber, offsets, sizes, mappedOffsets, mappedSizes))) {
+    return failure();
+  }
+  return getTiledImplementation(b, mappedOffsets, mappedSizes);
+}
+
 }  // namespace mlir::tutorial

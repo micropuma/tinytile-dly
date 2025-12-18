@@ -103,49 +103,6 @@ void TutorialTileAndFuse::runOnOperation() {
   int64_t numLoops = tilingOp.getLoopIteratorTypes().size();
   tileSizes.resize(numLoops, zero);
 
-  // // =================================================================
-  // // [新增] Reduction Splitting 逻辑
-  // // =================================================================
-  // if (tilingLevel == tutorial::TilingLevel::Reduction) {
-  //   // 假设我们在 lowering_config 里藏了一个 split_factor
-  //   // 或者这里暂时硬编码测试，例如 split factor = 4
-  //   int64_t splitFactor = 4; 
-    
-  //   // 配置 Split 选项
-  //   mlir::linalg::SplitReductionOptions splitOptions;
-  //   splitOptions.ratio = splitFactor; 
-  //   splitOptions.index = tilingOp.getLoopIteratorTypes().size() - 1; 
-  //   splitOptions.innerParallel = true; // 让拆分出来的维度变成并行的 (Parallel Reduction)
-
-  //   // 执行 Split Reduction
-  //   // 注意：splitReduction 只对 LinalgOp 有效，所以我们要 cast 一下
-  //   if (auto linalgOp = dyn_cast<linalg::LinalgOp>(tilingOp.getOperation())) {
-        
-  //     LLVM_DEBUG(llvm::dbgs() << "Attempting split reduction on: " << *linalgOp << "\n");
-      
-  //     FailureOr<linalg::SplitReductionResult> splitResult = 
-  //         mlir::linalg::splitReduction(rewriter, linalgOp,
-  //             [&](OpBuilder &b, Operation *op, Value input) -> mlir::linalg::SplitReductionOptions {
-  //                 return splitOptions;
-  //             });
-
-  //     if (succeeded(splitResult)) {
-  //       // 关键点：Split 后，原始 op 被替换了。
-  //       // splitResult->splitLinalgOp 是拆分后的核心计算 Op
-  //       // splitResult->mergeOp 是后续的归约合并 Op
-        
-  //       // 我们通常希望对 *拆分后* 的 Op 进行 Tiling
-  //       if (auto newTilingOp = dyn_cast<TilingInterface>(splitResult->splitLinalgOp.getOperation())) {
-  //           tilingOp = newTilingOp;
-  //           LLVM_DEBUG(llvm::dbgs() << "Split success. New tiling target: " << tilingOp << "\n");
-  //       }
-  //     }
-  //   }
-  // }
-  // // =================================================================
-
-  // LLVM_DEBUG(llvm::dbgs() << "Tiling operation: " << tilingOp << "\n";);
-
   // use scftiling options to help tiling
   scf::SCFTilingOptions tilingOptions;
   tilingOptions.setTileSizes(tileSizes);
@@ -208,6 +165,7 @@ void TutorialTileAndFuse::runOnOperation() {
 
     // 将consumer fuse进tile loops
     if (isa<tensor::InsertSliceOp, tensor::ParallelInsertSliceOp>(candidate)) {
+      LLVM_DEBUG(llvm::dbgs() << "Trying consumer fusion" << funcOp << "\n";);
       LLVM_DEBUG(llvm::dbgs() << "candidate is: " << *candidate << "\n";);
       FailureOr<scf::SCFFuseConsumerOfSliceResult> fusedResult =
           scf::tileAndFuseConsumerOfSlice(rewriter, candidate);
