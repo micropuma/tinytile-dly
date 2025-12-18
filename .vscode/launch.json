@@ -7,7 +7,9 @@
             "request": "launch",
             "program": "/home/douliyang/large/mlir-workspace/tinytile-dly/build/bin/tutorial-compiler",
             "args": [
-                    "/home/douliyang/large/mlir-workspace/tinytile-dly/test/example.mlir",
+                    "/home/douliyang/large/mlir-workspace/tinytile-dly/test/example-experiment.mlir",
+                    "-debug-only=slice-listener",
+                    "-debug-only=tile-and-fuse",
             ],
             "setupCommands": [
                 {
