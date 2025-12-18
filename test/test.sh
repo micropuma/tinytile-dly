@@ -19,4 +19,5 @@ tutorial-compiler \
 # but don't support vectorization and bufferization yet  
 tutorial-compiler \
     example-tutorial.mlir \
+    -o result-experiment.mlir \
     2>&1 | tee report-experiment.log
