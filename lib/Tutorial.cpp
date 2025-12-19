@@ -397,14 +397,25 @@ void tutorial::ReluOpDPS::getEffects(
 
   // 2. 如果操作的是 MemRef (Bufferization 之后)
   // Input 是读
-  for (Value value : getDpsInputs()) {
-    effects.emplace_back(MemoryEffects::Read::get(), SideEffects::DefaultResource::get());
+  for (auto [index, operand] : llvm::enumerate(getDpsInputs())) {
+    // 检查operand是否是MemRef类型
+    if (!llvm::isa<MemRefType>(operand.getType())) continue;
+    effects.emplace_back(MemoryEffects::Read::get(), 
+                         &getOperation()->getOpOperand(index), /*stage=*/0,
+                         /*effectOnFullRegion=*/true,
+                         SideEffects::DefaultResource::get());
   }
   
-  // Output (Outs) 是写 (也可能是读，取决于 Op 语义，Relu 是覆盖写，但声明为 ReadWrite 更安全)
-  for (Value value : getDpsInits()) {
-    effects.emplace_back(MemoryEffects::Write::get(), SideEffects::DefaultResource::get());
-    effects.emplace_back(MemoryEffects::Read::get(), SideEffects::DefaultResource::get());
+  // Output (Outs) 是写也是读
+  for (OpOperand &operand : getDpsInitsMutable()) {
+    if (!llvm::isa<MemRefType>(operand.get().getType()))
+      continue;
+    effects.emplace_back(MemoryEffects::Read::get(), &operand, /*stage=*/0,
+                         /*effectOnFullRegion=*/true,
+                         SideEffects::DefaultResource::get());
+    effects.emplace_back(MemoryEffects::Write::get(), &operand, /*stage=*/0,
+                         /*effectOnFullRegion=*/true,
+                         SideEffects::DefaultResource::get());
   }
 }
 
