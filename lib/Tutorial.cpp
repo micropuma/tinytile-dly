@@ -1,6 +1,8 @@
 #include "Tutorial.h"
 
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #define GET_OP_CLASSES
 #include "Tutorial.cpp.inc"
@@ -14,7 +16,26 @@ void mlir::tutorial::TutorialDialect::initialize() {
 
 #include "TutorialDialect.cpp.inc"
 
-namespace mlir::tutorial {
+using namespace mlir;
+using namespace mlir::tutorial;
+
+/// Returns a memref.subview or a tensor.extract_slice based on the type of the
+/// `source`.
+static Operation *getSlice(OpBuilder &b, Location loc, Value source,
+                           ArrayRef<OpFoldResult> offsets,
+                           ArrayRef<OpFoldResult> sizes,
+                           ArrayRef<OpFoldResult> strides) {
+  return TypeSwitch<Type, Operation *>(source.getType())
+      .Case<RankedTensorType>([&](RankedTensorType t) -> Operation * {
+        return b.create<tensor::ExtractSliceOp>(loc, source, offsets, sizes,
+                                                strides);
+      })
+      .Case<MemRefType>([&](MemRefType type) -> Operation * {
+        return b.create<memref::SubViewOp>(loc, source, offsets, sizes,
+                                           strides);
+      })
+      .Default([&](Type t) -> Operation * { return nullptr; });
+}
 
 // 获取DequantOp操作的迭代区间
 SmallVector<Range> DequantOp::getIterationDomain(OpBuilder &b) {
@@ -309,31 +330,33 @@ LogicalResult ReluOpDPS::getResultTilePosition(
 
 // 注意这里和非DPS版本的区别
 // 而且为了后续的bufferization，还需要同时考虑tensor type和memref type
+// TODO(leon): 重构支持tensor和bufferization
 FailureOr<TilingResult> ReluOpDPS::getTiledImplementation(
-    OpBuilder &b, ArrayRef<OpFoldResult> offsets,
+    OpBuilder &builder, ArrayRef<OpFoldResult> offsets,
     ArrayRef<OpFoldResult> sizes) {
-  Location loc = getLoc();
   int64_t rank = getInputOperandRank();
-  SmallVector<OpFoldResult> strides(rank, b.getI64IntegerAttr(1));
+  SmallVector<Value> tiledOperands;
+  SmallVector<OpFoldResult> strides(rank, builder.getI64IntegerAttr(1));
 
-  auto inputTile = b.create<tensor::ExtractSliceOp>(loc, getInput(), offsets,
-                                                    sizes, strides);
+  Operation *inputSlice =
+    getSlice(builder, getLoc(), getInput(), offsets, sizes, strides);
+  tiledOperands.push_back(inputSlice->getResult(0));
   // DPS模式下，还需要对output做slice
-  auto outputTile = b.create<tensor::ExtractSliceOp>(loc, getOutput(), offsets,
-                                                     sizes, strides);
+  Operation *outputSlice =
+    getSlice(builder, getLoc(), getOutput(), offsets, sizes, strides);
+  tiledOperands.push_back(outputSlice->getResult(0));
 
   SmallVector<Type> resultTypes;
   // DestinationStypeOpInterface提供的接口
   if (hasPureTensorSemantics()) {
-    resultTypes.push_back(outputTile.getResultType());
+    resultTypes.push_back(tiledOperands[1].getType());
   }
 
   Operation *tiledOp =
-      mlir::clone(b, getOperation(), resultTypes, {inputTile, outputTile});
-
+      mlir::clone(builder, getOperation(), resultTypes, tiledOperands);
   return TilingResult{{tiledOp},
                       SmallVector<Value>(tiledOp->getResults()),
-                      {inputTile, outputTile}};
+                      {inputSlice, outputSlice}};
 }
 
 // 为了计算结果的offsets和sizes，返回iteration domain的相应坐标
@@ -391,7 +414,6 @@ void tutorial::ReluOpDPS::getEffects(
   
   if (hasPureTensorSemantics()) {
     // Tensor 模式下是 Pure 的，什么都不做，列表为空即可。
-    // 或者显式声明 Allocate 效果给 result (比较少见，通常留空即可)
     return;
   }
 
@@ -418,5 +440,3 @@ void tutorial::ReluOpDPS::getEffects(
                          SideEffects::DefaultResource::get());
   }
 }
-
-}  // namespace mlir::tutorial
